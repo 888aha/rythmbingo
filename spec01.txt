@@ -1,0 +1,330 @@
+ **implementation spec** It covers: 
+
+* **caller pools with 8 symbols** (teacher-facing)
+* **caller cards** (one per rhythm, stamped with pool symbols)
+* **recommendation table by attendance intervals**
+* **call sheet** (text fallback)
+* **quality / statistics table** (“deck QC”) for the produced student cards
+
+Everything is deterministic and keeps your pipeline split: **data → tiles → layout PDFs → inspection**.
+
+---
+
+# Implementation Spec v0.1 — Rhythm Bingo Pools, Caller Cards, Deck QC
+
+## 0) Scope
+
+This spec extends the existing system with:
+
+1. A **fixed deck** of student bingo cards (print-ready)
+2. **Attendance-based recommendations** using **8 pools**
+3. A **caller-card pack**: one card per rhythm tile, stamped with pool symbols
+4. A **call sheet** (no caller cards needed)
+5. A **Deck QC table** describing the “quality” of the produced deck
+
+Non-goals:
+
+* No regeneration required on attendance changes
+* No “Pool index PDF” separate from caller cards (pool info is printed on caller cards)
+
+---
+
+## 1) Terms and invariants
+
+### 1.1 Rhythm
+
+* A rhythm is exactly **one bar / one measure of 4/4 time**.
+* Total duration must equal **one whole note**.
+* Rhythm notation is valid LilyPond rhythm notation.
+
+### 1.2 Student deck
+
+* A “deck” is `N_cards` student bingo cards, each containing `M` rhythm tiles.
+* No duplicate rhythm on a single card.
+* Preferably no two cards with identical rhythm sets (enforced).
+
+### 1.3 Pools and attendance intervals
+
+* We define **8 pools** mapping attendance ranges to a recommended subset size `k`.
+* Teacher-facing label is a **symbol** (not `P05` etc).
+* Internally, each pool has a stable ID `P01..P08`.
+
+---
+
+## 2) Inputs and configuration
+
+### 2.1 Inputs
+
+* `rhythms.txt` (or equivalent) defines the rhythm bank (one rhythm per line).
+* Rendered tiles are produced from this bank (existing stage).
+
+### 2.2 New config file (YAML or JSON)
+
+Create `config_pools.yml`:
+
+```yaml
+deck:
+  n_cards: 40
+  card_size: 16
+  seed: 12345
+
+pools:
+  # Attendance intervals: [min_children, max_children] and recommended k = max_children
+  intervals:
+    - { pool_id: P01, symbol: "★", children_min: 1,  children_max: 5,  k: 5  }
+    - { pool_id: P02, symbol: "■", children_min: 6,  children_max: 10, k: 10 }
+    - { pool_id: P03, symbol: "▲", children_min: 11, children_max: 15, k: 15 }
+    - { pool_id: P04, symbol: "●", children_min: 16, children_max: 20, k: 20 }
+    - { pool_id: P05, symbol: "◆", children_min: 21, children_max: 25, k: 25 }
+    - { pool_id: P06, symbol: "✚", children_min: 26, children_max: 30, k: 30 }
+    - { pool_id: P07, symbol: "✖", children_min: 31, children_max: 35, k: 35 }
+    - { pool_id: P08, symbol: "✿", children_min: 36, children_max: 40, k: 40 }
+
+  call_pool:
+    min_occ: 2
+    min_pool_size: 20   # if too small, relax to >=1
+```
+
+Notes:
+
+* `k` is the **upper bound** of the interval (teacher-friendly, conservative).
+* Symbols must be printable in black & white and highly distinct.
+
+---
+
+## 3) Deterministic deck ordering requirement
+
+**Decision:** Make the student deck ordered so that recommending “use cards 1..k” works well for every k.
+
+Implementation (deterministic greedy ordering):
+
+* Start with empty selection
+* Repeatedly pick the next card that maximizes a score combining:
+
+  * new rhythms added to the union (`+new_count`)
+  * increased multiplicity for rhythms already present (`+sharedness_gain`)
+  * penalty for maximum overlap with selected cards (`-max_overlap_penalty`)
+* Tie-break deterministically (stable ordering, then RNG with seed)
+
+This ordering is computed once per deck and saved.
+
+Output:
+
+* `deck_order.json` containing the ordered list of card IDs and their rhythm sets.
+
+If you already generate cards in one pass, you can:
+
+* generate raw cards
+* then reorder using the greedy score
+* then write the final PDFs in that order
+
+---
+
+## 4) Pool computation (callable rhythm sets)
+
+For each pool with subset size `k`:
+
+1. Consider distributed student cards: `cards[1..k]` (1-indexed in teacher docs)
+2. Compute frequency `freq_k[rhythm_id]` across those `k` cards
+3. Define callable set:
+
+* Primary: `pool = { r | freq_k[r] >= min_occ }`
+* Fallback: if `len(pool) < min_pool_size`, relax to `>=1`
+
+Outputs:
+
+* `pools.json` (machine-readable), schema:
+
+```json
+{
+  "version": "v0.1",
+  "deck": {"n_cards": 40, "card_size": 16, "seed": 12345},
+  "pools": [
+    {
+      "pool_id": "P03",
+      "symbol": "▲",
+      "children_min": 11,
+      "children_max": 15,
+      "k": 15,
+      "min_occ_used": 2,
+      "callable_rhythm_ids": ["R003", "R012", "..."]
+    }
+  ]
+}
+```
+
+---
+
+## 5) Caller cards PDF
+
+### 5.1 Content
+
+One caller card per rhythm ID. Each card prints:
+
+* rhythm tile (large)
+* rhythm ID (e.g. `R037`)
+* pool symbols row: all symbols for pools in which this rhythm is callable
+
+Example footer:
+
+* `★ ■ ▲ ● ◆` (symbols sorted by pool order)
+* Optionally compress consecutive pools visually (not required).
+
+### 5.2 How to compute symbol row
+
+Invert `pools.json`:
+
+* For each rhythm `r`, collect `symbols = { pool.symbol | r in pool.callable_rhythm_ids }`
+
+Output:
+
+* `caller_cards.pdf`
+
+---
+
+## 6) Recommendation table (attendance → what to use)
+
+Embed a single table (catalog or call sheet):
+
+Columns:
+
+* `Children today` (interval)
+* `Use student cards` (always `1–k`)
+* `Caller symbol` (single symbol for that interval)
+
+Example row:
+
+* `11–15 | 1–15 | ▲`
+
+This is the only lookup the teacher needs.
+
+---
+
+## 7) Call sheet (text fallback, no caller cards)
+
+Output: `call_sheet.txt` or `call_sheet.pdf`.
+
+Structure:
+
+* A section per pool symbol, including attendance interval and callable rhythm IDs.
+
+Example:
+
+```
+▲  (11–15 children)  Use student cards 1–15
+R003 R007 R012 R018 ...
+```
+
+This allows calling without the caller-card pack.
+
+---
+
+## 8) Deck QC (quality / statistics table)
+
+This is the “simple statistics table” that diagnoses whether the produced deck is pedagogically robust.
+
+### 8.1 Metrics (computed for each k in the pool intervals)
+
+For each recommended subset size `k`:
+
+**Coverage & shareability**
+
+* `union_size_k`: number of distinct rhythms in cards `1..k`
+* `freq_min_k`, `freq_p10_k`, `freq_median_k`, `freq_max_k` over rhythms in the union
+* `call_pool_size_k`: number of rhythms in callable pool (after min_occ rule)
+* `call_pool_min_occ_used_k`: 2 or 1 (if fallback triggered)
+
+**Redundancy / similarity**
+
+* `duplicate_pairs_k`: count of card pairs with identical rhythm sets (must be 0)
+* `overlap_hist_k`: histogram of `|Si ∩ Sj|` across all pairs among `1..k`
+
+  * Store compactly (e.g. JSON map from overlap size to count)
+* `max_overlap_k`: maximum intersection size among all pairs
+* `mean_overlap_k`: average intersection size
+
+These are not “statistics” in the inferential sense; they are **deck diagnostics**.
+
+### 8.2 Deck QC outputs
+
+* `deck_qc.json` with full details (including histograms)
+* `deck_qc.csv` with a teacher-/developer-readable table (one row per k)
+
+CSV columns (suggested minimal):
+
+* `k`
+* `children_interval`
+* `symbol`
+* `union_size`
+* `call_pool_size`
+* `min_occ_used`
+* `duplicate_pairs`
+* `max_overlap`
+* `mean_overlap`
+
+Optional to embed a condensed version in `catalog.pdf`.
+
+---
+
+## 9) Acceptance criteria
+
+A deck is acceptable if:
+
+1. **Rhythm validity**
+
+* All rhythms sum to 4/4 (existing invariant)
+
+2. **Deck integrity**
+
+* No duplicate rhythms within a card
+* `duplicate_pairs_k == 0` for `k = n_cards` (and ideally for all k)
+
+3. **Pools usable**
+
+* For each pool, `call_pool_size_k >= min_pool_size` OR fallback applied and documented
+* Caller card for each rhythm prints correct symbol membership
+
+4. **Pedagogical sanity (soft)**
+
+* `max_overlap_k` not “too high” (threshold depends on card_size; start by reporting only)
+* Callable pool sizes not too small (teacher should have enough calls)
+
+---
+
+## 10) Scripts and pipeline integration
+
+Add these scripts (names are suggestions):
+
+1. `compute_deck_order.py`
+
+* Input: raw card definitions / rhythm sets + seed
+* Output: `deck_order.json`
+
+2. `compute_pools.py`
+
+* Inputs: `deck_order.json`, `config_pools.yml`
+* Outputs: `pools.json`, `call_sheet.txt/pdf`
+
+3. `compute_deck_qc.py`
+
+* Inputs: `deck_order.json`, `config_pools.yml`
+* Outputs: `deck_qc.json`, `deck_qc.csv`
+
+4. `render_caller_cards.py`
+
+* Inputs: rhythm tiles + `pools.json`
+* Output: `caller_cards.pdf`
+
+Your existing `run.bat` should call these after tiles exist and before final PDFs are assembled.
+
+---
+
+## 11) Notes on print/layout
+
+* Symbols must be **large enough to read when fanning cards**.
+* Avoid relying on color.
+* Rhythm tile should remain the dominant visual element.
+
+---
+
+

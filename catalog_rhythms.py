@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import argparse
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4, landscape
@@ -9,25 +10,7 @@ from reportlab.lib.units import mm
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPDF
 
-
-def load_bank_lines(bank_path: Path) -> list[str]:
-    return [
-        ln.strip()
-        for ln in bank_path.read_text(encoding="utf-8").splitlines()
-        if ln.strip() and not ln.strip().startswith("#")
-    ]
-
-
-def tile_path(tile_dir: Path, idx1: int) -> Path:
-    # idx1 is 1-based
-    p = tile_dir / f"rhythm_{idx1:03d}.preview.svg"
-    if not p.exists():
-        # fallback if preview isn't used
-        p2 = tile_dir / f"rhythm_{idx1:03d}.svg"
-        if p2.exists():
-            return p2
-        raise FileNotFoundError(f"Missing tile for #{idx1:03d}: {p}")
-    return p
+from rb_utils import list_tile_previews, rhythm_id, tile_path_from_rhythm_id
 
 
 def draw_svg_fit(
@@ -38,16 +21,18 @@ def draw_svg_fit(
     w: float,
     h: float,
     pad: float = 3 * mm,
+    max_enlarge: float = 1.4,
 ) -> None:
     drawing = svg2rlg(str(svg_path))
+
     aw = max(1.0, w - 2 * pad)
     ah = max(1.0, h - 2 * pad)
 
     sx = aw / drawing.width
     sy = ah / drawing.height
 
-    # Catalog: allow modest enlarge for readability, but don’t go crazy
-    s = min(1.4, sx, sy)
+    # Catalog: allow modest enlarge for readability
+    s = min(max_enlarge, sx, sy)
 
     drawing.scale(s, s)
 
@@ -60,40 +45,51 @@ def draw_svg_fit(
 
 
 def main() -> None:
-    bank_path = Path("rhytms.txt")          # match your current filename
-    tile_dir = Path("tiles_svg")
-    out_pdf = Path("rhythm_catalog.pdf")
+    ap = argparse.ArgumentParser(description="Render rhythm catalog PDF from rendered tiles.")
+    ap.add_argument("--tiles", default="tiles_svg", help="Tiles directory.")
+    ap.add_argument("--out", default="rhythm_catalog.pdf", help="Output PDF.")
+    ap.add_argument("--cols", type=int, default=3, help="Number of columns per page.")
+    ap.add_argument("--rows", type=int, default=5, help="Number of rows per page.")
+    ap.add_argument("--portrait", action="store_true", help="Use A4 portrait (default is landscape).")
+    args = ap.parse_args()
+
+    tiles_dir = Path(args.tiles)
+    out_pdf = Path(args.out)
+
+    # Canonical rhythm universe = rendered tiles
+    tile_paths = list_tile_previews(tiles_dir)
+    n = len(tile_paths)
+    if n <= 0:
+        raise SystemExit(f"No tiles found in {tiles_dir}.")
 
     # Page setup
-    page = A4                 # portrait
-    # page = landscape(A4)    # uncomment for A4 landscape catalog
+    page = A4 if args.portrait else landscape(A4)
     page_w, page_h = page
 
     # Layout
     margin = 12 * mm
-    cols = 2
-    rows = 10                  # 20 items/page
+    cols = int(args.cols)
+    rows = int(args.rows)
+    if cols <= 0 or rows <= 0:
+        raise SystemExit("cols and rows must be positive integers.")
+
     cell_gap_x = 6 * mm
     cell_gap_y = 4 * mm
 
-    # Cell sizes
     usable_w = page_w - 2 * margin
     usable_h = page_h - 2 * margin
     cell_w = (usable_w - (cols - 1) * cell_gap_x) / cols
     cell_h = (usable_h - (rows - 1) * cell_gap_y) / rows
 
-    lines = load_bank_lines(bank_path)
-    n = len(lines)
-    if n == 0:
-        raise SystemExit(f"No rhythms found in {bank_path}")
-
     c = canvas.Canvas(str(out_pdf), pagesize=page)
 
-    c.setFont("Helvetica", 9)
+    label_font = "Helvetica"
+    label_size = 10
+
+    per_page = rows * cols
 
     for i in range(1, n + 1):
-        # 0-based index within page
-        j = (i - 1) % (rows * cols)
+        j = (i - 1) % per_page
         r = j // cols
         col = j % cols
 
@@ -104,17 +100,18 @@ def main() -> None:
         c.setLineWidth(0.5)
         c.rect(x, y, cell_w, cell_h)
 
-        # Label
-        c.drawString(x + 2 * mm, y + cell_h - 4 * mm, f"{i:03d}")
+        # Label (R###)
+        rid = rhythm_id(i)
+        c.setFont(label_font, label_size)
+        c.drawString(x + 2 * mm, y + cell_h - 5 * mm, rid)
 
-        # Draw the tile
-        svg = tile_path(tile_dir, i)
+        # Tile
+        svg = tile_path_from_rhythm_id(tiles_dir, rid)
         draw_svg_fit(c, svg, x, y, cell_w, cell_h, pad=4 * mm)
 
-        # New page
-        if j == rows * cols - 1 and i != n:
+        # New page boundary
+        if j == per_page - 1 and i != n:
             c.showPage()
-            c.setFont("Helvetica", 9)
 
     c.save()
     print(f"Wrote catalog: {out_pdf} ({n} rhythms)")

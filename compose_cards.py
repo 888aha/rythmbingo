@@ -1,6 +1,8 @@
+# compose_cards.py
 from __future__ import annotations
 
 from pathlib import Path
+import argparse
 import random
 
 from reportlab.pdfgen import canvas
@@ -10,11 +12,16 @@ from reportlab.lib.units import mm
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPDF
 
+from rb_utils import read_json, tile_path_from_rhythm_id
+
 
 def list_tiles(tile_dir: Path) -> list[Path]:
-    tiles = sorted(tile_dir.glob("*.preview.svg"))
+    tiles = sorted(tile_dir.glob("rhythm_*.preview.svg"))
     if not tiles:
-        raise SystemExit(f"No *.preview.svg found in {tile_dir}")
+        # fallback
+        tiles = sorted(tile_dir.glob("rhythm_*.svg"))
+    if not tiles:
+        raise SystemExit(f"No rhythm_*.svg / rhythm_*.preview.svg found in {tile_dir}")
     return tiles
 
 
@@ -65,13 +72,56 @@ def place_svg_in_cell(
     renderPDF.draw(drawing, c, dx, dy)
 
 
-def main() -> None:
-    # Settings
-    tile_dir = Path("tiles_svg")
-    out_pdf = Path("bingo_cards.pdf")
+def _render_from_deck_json(deck_path: Path, *, tiles_dir: Path, out_pdf: Path) -> None:
+    doc = read_json(deck_path)
+    deck = doc.get("deck") or {}
+    cards = doc.get("cards") or []
+
+    rows = int(deck.get("rows", 3))
+    cols = int(deck.get("cols", 3))
+    if rows != 3 or cols != 3:
+        raise SystemExit(f"compose_cards.py currently supports fixed 3x3 only. Got rows={rows}, cols={cols}.")
+
+    if not cards:
+        raise SystemExit(f"No cards in {deck_path}")
+
+    # Page geometry (A4 landscape)
+    page_w, page_h = landscape(A4)
+
+    margin = 10 * mm
+    grid_x0 = margin
+    grid_y0 = margin
+    grid_w = page_w - 2 * margin
+    grid_h = page_h - 2 * margin
+
+    c = canvas.Canvas(str(out_pdf), pagesize=(page_w, page_h))
+    cell_w = grid_w / cols
+    cell_h = grid_h / rows
+
+    for card in cards:
+        rids = card.get("rhythm_ids") or []
+        if len(rids) != rows * cols:
+            raise SystemExit(f"Card {card.get('card_id')} has {len(rids)} rhythms; expected {rows*cols}.")
+
+        draw_grid(c, grid_x0, grid_y0, grid_w, grid_h, rows, cols, lw=1.2)
+
+        idx = 0
+        for r in range(rows):
+            for col in range(cols):
+                cell_x = grid_x0 + col * cell_w
+                cell_y = grid_y0 + (rows - 1 - r) * cell_h
+
+                svg_path = tile_path_from_rhythm_id(tiles_dir, rids[idx])
+                place_svg_in_cell(c, svg_path, cell_x, cell_y, cell_w, cell_h, pad=7 * mm)
+                idx += 1
+
+        c.showPage()
+
+    c.save()
+
+
+def _render_random(cards: int, *, tiles_dir: Path, out_pdf: Path, seed: int) -> None:
     rows, cols = 3, 3
-    cards = 30
-    seed = 42
 
     # Page geometry (A4 landscape)
     page_w, page_h = landscape(A4)
@@ -83,7 +133,7 @@ def main() -> None:
     grid_w = page_w - 2 * margin
     grid_h = page_h - 2 * margin
 
-    tiles = list_tiles(tile_dir)
+    tiles = list_tiles(tiles_dir)
     if len(tiles) < rows * cols:
         raise SystemExit(f"Need at least {rows*cols} tiles, found {len(tiles)}.")
 
@@ -121,6 +171,24 @@ def main() -> None:
 
     c.save()
     print(f"Wrote {cards} cards to {out_pdf}")
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Render student bingo cards (fixed 3x3).")
+    ap.add_argument("--deck", type=str, default=None, help="Path to deck_order.json (preferred).")
+    ap.add_argument("--tiles", type=str, default="tiles_svg", help="Tiles directory.")
+    ap.add_argument("--out", type=str, default="bingo_cards.pdf", help="Output PDF.")
+    ap.add_argument("--cards", type=int, default=30, help="(Legacy) number of random cards if --deck is not used.")
+    ap.add_argument("--seed", type=int, default=42, help="(Legacy) seed for random cards if --deck is not used.")
+    args = ap.parse_args()
+
+    tiles_dir = Path(args.tiles)
+    out_pdf = Path(args.out)
+
+    if args.deck:
+        _render_from_deck_json(Path(args.deck), tiles_dir=tiles_dir, out_pdf=out_pdf)
+    else:
+        _render_random(args.cards, tiles_dir=tiles_dir, out_pdf=out_pdf, seed=args.seed)
 
 
 if __name__ == "__main__":
