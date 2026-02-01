@@ -12,7 +12,12 @@ from reportlab.lib.units import mm
 from svglib.svglib import svg2rlg
 from reportlab.graphics import renderPDF
 
-from rb_utils import read_json, tile_path_from_rhythm_id
+from rb_utils import (
+    read_json,
+    tile_path_from_rhythm_id,
+    try_register_unicode_font,
+    pool_symbols_for_card_index,
+)
 
 
 def list_tiles(tile_dir: Path) -> list[Path]:
@@ -180,7 +185,20 @@ def main() -> None:
     ap.add_argument("--out", type=str, default="bingo_cards.pdf", help="Output PDF.")
     ap.add_argument("--cards", type=int, default=30, help="(Legacy) number of random cards if --deck is not used.")
     ap.add_argument("--seed", type=int, default=42, help="(Legacy) seed for random cards if --deck is not used.")
+    ap.add_argument(
+        "--pools",
+        type=str,
+        default=None,
+        help="Optional pools.json; if provided, pool symbols are printed on each student card.",
+    )
     args = ap.parse_args()
+
+    pools: list[dict] = []
+    if args.pools:
+        pools = (read_json(Path(args.pools)).get("pools") or [])
+
+    font_name, warn = try_register_unicode_font()
+    sym_font = font_name or "Helvetica"
 
     tiles_dir = Path(args.tiles)
     out_pdf = Path(args.out)

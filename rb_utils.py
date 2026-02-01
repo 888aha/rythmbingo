@@ -63,6 +63,37 @@ def write_json(path: Path, obj: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
+def pool_symbols_for_card_index(card_index_1based: int, pools: list[dict]) -> list[str]:
+    """
+    Return pool symbols applicable to a given student card index.
+
+    Call-sheet semantics:
+      A pool applies to student cards 1..k_effective.
+      Therefore card i belongs to pool p iff i <= p["k_effective"].
+
+    Pools are returned in pools.json file order (deterministic).
+    """
+    if card_index_1based <= 0:
+        raise ValueError("card_index_1based must be 1-based")
+
+    symbols: list[str] = []
+
+    for p in pools:
+        symbol = str(p.get("symbol", "")).strip()
+        if not symbol:
+            continue
+
+        try:
+            k_eff = int(p.get("k_effective") or 0)
+        except Exception as e:
+            raise ValueError(f"Invalid k_effective in pool {p!r}") from e
+
+        if card_index_1based <= k_eff:
+            symbols.append(symbol)
+
+    return symbols
+
+
 
 @dataclass(frozen=True)
 class DeckConfig:

@@ -1,3 +1,4 @@
+#main.py
 from __future__ import annotations
 
 import argparse
@@ -70,6 +71,7 @@ def main() -> None:
         "compute_deck_qc.py",
         "--config", str(config_path),
         "--deck", str(deck_order),
+        "--pools", str(pools_json),
         "--out-json", str(deck_qc_json),
         "--out-csv", str(deck_qc_csv),
     )

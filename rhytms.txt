@@ -1,21 +1,84 @@
-c4 c4 c4 c4
-c2 c4 c4
-c4. c8 c4 c4
-c8 c8 c8 c8 c4 c4
-c16 c16 c16 c16 c16 c16 c16 c16 c4 c4
-r4 c4 c4 c4
+#1–10: very simple (1–2 events)
+
+c1
+c2 c2
+c2. c4
+c4 c2.
+c4. c2
+c4 c2 c4
+c4 r4 c2
+
+#11–20: quarter-note based
+c2 r4 c4
+
+c4 c2 r4
 c4 r2 c4
-c8. c16 c4 c4 c4
-r8 r8 c4 c4 c4
-c2. r4
-c16 c16 c16 c16 c16 c16 c16 c16 c16 c16 c16 c16 c16 c16 c16 c16
+c2 c4 r4
+c4 r4 c2
+
+#21–30: eighths introduced (still sparse)
+
+c2 c8 c8 c4
+c4 c8 c8 c2
+c8 c8 c2 c4
+c4 c2 c8 c8
+c2 c4 r4
+
+#31–40: mixed quarters and eighths
+
+c4 c4 c4 r4
+c4 r4 c4 c4
+c4 c4 r2
+
+#41–50: dotted rhythms
+
 c4. c8 c4 c4
-c4 c8 c8 c4 c4
-c8 c8 c4 c4 c4
-c4 c4 c8 c8 c4
-r8 c8 c4 c4 c4
-c8. c16 c4 c4 c4
-c4 c4 c8. c16 c4
-c16 c16 c16 c16 c4 c4 c4
+c4 c4 c4. c8
+c4. c8 c2
+c2 c4. c8
+c4. c8 c4 r4
+c4 r4 c4. c8
+c4. c8 c8 c8 c4
+
+#51–60: rests inside the bar
+
+c4 r4 c4 c4
+c4 c4 r4 c4
+c2 r2
+c4 r2 c4
+c2 r4 c4
+c4 r4 c2
+c4 c8 c8 r4 c4
+
+#61–70: eighths + rests
+
+c8 c8 r4 c4 c4
+c4 c4 c8 c8 r4
+c8 c8 c4 r4 c4
+c4 r4 c8 c8 c4
+c8 c8 r4 c8 c8 c4
+c8 c8 c4 c4 r4
+c2 c8 c8 r4
+
+#71–80: sixteenths introduced (lightly)
+
 c4 c16 c16 c16 c16 c4 c4
-c8 c16 c16 c8 c8 c4 c4
+c4 c4 c16 c16 c16 c16 c4
+c16 c16 c16 c16 c4 c4 c4
+c4 c16 c16 c16 c16 c8 c8 r4
+c8 c8 c4 c16 c16 c16 c16 c4
+c16 c16 c16 c16 c2 c4
+c4 c2 c16 c16 c16 c16
+
+#81–90: mixed complexity
+
+c8 c8 c16 c16 c16 c16 c4
+c4 c8 c8 c16 c16 c16 c16
+c8 c8 c4 c16 c16 c16 c16
+c16 c16 c16 c16 c8 c8 c4
+
+# 91–100: richest (still pedagogically sane)
+
+c16 c16 c16 c16 c8 c8 c8 c8 r4
+c8 c8 c16 c16 c16 c16 c4 c4
+c16 c16 c16 c16 c4 c8 c8 c4
