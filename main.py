@@ -1,4 +1,4 @@
-#main.py
+# main.py
 from __future__ import annotations
 
 import argparse
@@ -38,6 +38,7 @@ def main() -> None:
     deck_qc_json = out_dir / "deck_qc.json"
     deck_qc_csv = out_dir / "deck_qc.csv"
     caller_cards_pdf = out_dir / "caller_cards.pdf"
+    bingo_cards_pdf = out_dir / "bingo_cards.pdf"
 
     if not args.skip_tiles:
         run_py("render_tiles.py")
@@ -47,56 +48,78 @@ def main() -> None:
 
     run_py(
         "generate_deck_raw.py",
-        "--config", str(config_path),
-        "--bank", str(args.bank),
-        "--out", str(deck_raw),
+        "--config",
+        str(config_path),
+        "--bank",
+        str(args.bank),
+        "--out",
+        str(deck_raw),
     )
 
     # Deterministic greedy ordering
     run_py(
         "compute_deck_order.py",
-        "--in", str(deck_raw),
-        "--out", str(deck_order),
+        "--in",
+        str(deck_raw),
+        "--out",
+        str(deck_order),
     )
 
     run_py(
         "compute_pools.py",
-        "--config", str(config_path),
-        "--deck", str(deck_order),
-        "--out", str(pools_json),
-        "--call-sheet", str(call_sheet_txt),
+        "--config",
+        str(config_path),
+        "--deck",
+        str(deck_order),
+        "--out",
+        str(pools_json),
+        "--call-sheet",
+        str(call_sheet_txt),
     )
 
     run_py(
         "compute_deck_qc.py",
-        "--config", str(config_path),
-        "--deck", str(deck_order),
-        "--pools", str(pools_json),
-        "--out-json", str(deck_qc_json),
-        "--out-csv", str(deck_qc_csv),
+        "--config",
+        str(config_path),
+        "--deck",
+        str(deck_order),
+        "--pools",
+        str(pools_json),
+        "--out-json",
+        str(deck_qc_json),
+        "--out-csv",
+        str(deck_qc_csv),
     )
 
     if not args.skip_caller:
         run_py(
             "render_caller_cards.py",
-            "--pools", str(pools_json),
-            "--tiles", str(args.tiles_dir),
-            "--out", str(caller_cards_pdf),
+            "--pools",
+            str(pools_json),
+            "--tiles",
+            str(args.tiles_dir),
+            "--out",
+            str(caller_cards_pdf),
         )
 
     if not args.skip_cards:
         run_py(
             "compose_cards.py",
-            "--deck", str(deck_order),
-            "--tiles", str(args.tiles_dir),
-            "--out", "bingo_cards.pdf",
+            "--deck",
+            str(deck_order),
+            "--tiles",
+            str(args.tiles_dir),
+            "--pools",
+            str(pools_json),
+            "--out",
+            str(bingo_cards_pdf),
         )
 
     print("Done.")
     print("Key outputs:")
     print(f" - {Path(args.tiles_dir)}/")
     print(" - rhythm_catalog.pdf")
-    print(" - bingo_cards.pdf")
+    print(f" - {bingo_cards_pdf}")
     print(f" - {pools_json}")
     print(f" - {caller_cards_pdf}")
     print(f" - {call_sheet_txt}")

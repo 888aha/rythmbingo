@@ -23,7 +23,6 @@ from rb_utils import (
 def list_tiles(tile_dir: Path) -> list[Path]:
     tiles = sorted(tile_dir.glob("rhythm_*.preview.svg"))
     if not tiles:
-        # fallback
         tiles = sorted(tile_dir.glob("rhythm_*.svg"))
     if not tiles:
         raise SystemExit(f"No rhythm_*.svg / rhythm_*.preview.svg found in {tile_dir}")
@@ -61,8 +60,7 @@ def place_svg_in_cell(
     # Scale to fit (preserve aspect ratio)
     sx = aw / drawing.width
     sy = ah / drawing.height
-    s = min(1.0, sx, sy)   # never enlarge, only shrink if needed
-
+    s = min(1.0, sx, sy)  # never enlarge, only shrink if needed
 
     # IMPORTANT: renderPDF.draw doesn't respect drawing.scale reliably across versions
     # if you also adjust drawing.width/height. So we scale via transform.
@@ -77,7 +75,43 @@ def place_svg_in_cell(
     renderPDF.draw(drawing, c, dx, dy)
 
 
-def _render_from_deck_json(deck_path: Path, *, tiles_dir: Path, out_pdf: Path) -> None:
+def _draw_card_header(
+    c: canvas.Canvas,
+    *,
+    page_w: float,
+    page_h: float,
+    margin: float,
+    card_id: str,
+    card_index_1based: int,
+    pools: list[dict],
+    sym_font: str,
+) -> None:
+    """
+    Header is intentionally outside the grid area (in the top margin band),
+    so it doesn't compete visually with the rhythms.
+    """
+    y_header = page_h - margin + 2 * mm
+
+    # Left: Card ID
+    c.setFont("Helvetica", 12)
+    c.drawString(margin, y_header, card_id)
+
+    # Right: pool symbols (call-sheet semantics via rb_utils.pool_symbols_for_card_index)
+    if pools:
+        syms = pool_symbols_for_card_index(card_index_1based, pools)
+        if syms:
+            c.setFont(sym_font, 14)
+            c.drawRightString(page_w - margin, y_header, " ".join(syms))
+
+
+def _render_from_deck_json(
+    deck_path: Path,
+    *,
+    tiles_dir: Path,
+    out_pdf: Path,
+    pools: list[dict],
+    sym_font: str,
+) -> None:
     doc = read_json(deck_path)
     deck = doc.get("deck") or {}
     cards = doc.get("cards") or []
@@ -103,10 +137,24 @@ def _render_from_deck_json(deck_path: Path, *, tiles_dir: Path, out_pdf: Path) -
     cell_w = grid_w / cols
     cell_h = grid_h / rows
 
-    for card in cards:
+    for i0, card in enumerate(cards):
+        i1 = i0 + 1  # 1-based card index (matches call-sheet semantics)
+
         rids = card.get("rhythm_ids") or []
         if len(rids) != rows * cols:
             raise SystemExit(f"Card {card.get('card_id')} has {len(rids)} rhythms; expected {rows*cols}.")
+
+        card_id = str(card.get("card_id") or f"C{i1:03d}")
+        _draw_card_header(
+            c,
+            page_w=page_w,
+            page_h=page_h,
+            margin=margin,
+            card_id=card_id,
+            card_index_1based=i1,
+            pools=pools,
+            sym_font=sym_font,
+        )
 
         draw_grid(c, grid_x0, grid_y0, grid_w, grid_h, rows, cols, lw=1.2)
 
@@ -126,12 +174,14 @@ def _render_from_deck_json(deck_path: Path, *, tiles_dir: Path, out_pdf: Path) -
 
 
 def _render_random(cards: int, *, tiles_dir: Path, out_pdf: Path, seed: int) -> None:
+    """
+    Legacy mode: random cards. We still print Card IDs, but we do NOT print pool symbols,
+    because pool applicability is defined over the ordered deck (call-sheet semantics).
+    """
     rows, cols = 3, 3
 
-    # Page geometry (A4 landscape)
     page_w, page_h = landscape(A4)
 
-    # Grid area margins
     margin = 10 * mm
     grid_x0 = margin
     grid_y0 = margin
@@ -148,13 +198,16 @@ def _render_random(cards: int, *, tiles_dir: Path, out_pdf: Path, seed: int) -> 
     cell_w = grid_w / cols
     cell_h = grid_h / rows
 
-    for k in range(1, cards + 1):
+    for i1 in range(1, cards + 1):
         chosen = rng.sample(tiles, rows * cols)  # unique per card
 
-        # Draw grid (boxes)
+        # Header (Card ID only)
+        y_header = page_h - margin + 2 * mm
+        c.setFont("Helvetica", 12)
+        c.drawString(margin, y_header, f"C{i1:03d}")
+
         draw_grid(c, grid_x0, grid_y0, grid_w, grid_h, rows, cols, lw=1.2)
 
-        # Place tiles (row 0 at top)
         idx = 0
         for r in range(rows):
             for col in range(cols):
@@ -197,14 +250,20 @@ def main() -> None:
     if args.pools:
         pools = (read_json(Path(args.pools)).get("pools") or [])
 
-    font_name, warn = try_register_unicode_font()
+    font_name, _warn = try_register_unicode_font()
     sym_font = font_name or "Helvetica"
 
     tiles_dir = Path(args.tiles)
     out_pdf = Path(args.out)
 
     if args.deck:
-        _render_from_deck_json(Path(args.deck), tiles_dir=tiles_dir, out_pdf=out_pdf)
+        _render_from_deck_json(
+            Path(args.deck),
+            tiles_dir=tiles_dir,
+            out_pdf=out_pdf,
+            pools=pools,
+            sym_font=sym_font,
+        )
     else:
         _render_random(args.cards, tiles_dir=tiles_dir, out_pdf=out_pdf, seed=args.seed)
 
