@@ -8,6 +8,15 @@ Inputs:
 Outputs:
   - out/pools.json
   - out/call_sheet.txt
+
+Pool callable-set semantics (Implementation Spec v0.2):
+  - Start from a frequency-derived "core" callable set.
+  - Extend deterministically so that, for each pool symbol:
+      A) every marked card has at least one fully-callable bingo line
+      B) at least one marked card can become a full card
+
+The produced callable set is a single list per pool (no phases). All additional
+fields in pools.json are diagnostic and exist to make the guarantees transparent.
 """
 
 from pathlib import Path
@@ -27,17 +36,16 @@ def _freq_over_cards(cards: list[dict], k: int) -> dict[str, int]:
 def _bingo_lines_3x3(rids: list[str]) -> list[tuple[int, int, list[str]]]:
     """Return bingo lines with deterministic tie-break metadata.
 
-    Returns a list of (kind_rank, pos_rank, line_rhythm_ids).
+    Returns list of (kind_rank, pos_rank, line_rhythm_ids)
 
-    kind_rank order:
-      0 = row (top -> bottom)
-      1 = col (left -> right)
+    kind_rank ordering:
+      0 = row (top->bottom)
+      1 = col (left->right)
       2 = diag (main, anti)
     """
     if len(rids) != 9:
         raise ValueError(f"Expected 9 rhythm IDs for 3x3, got {len(rids)}")
 
-    # Indices into the flattened 3x3 grid.
     idx_lines: list[tuple[int, int, list[int]]] = [
         # rows
         (0, 0, [0, 1, 2]),
@@ -47,7 +55,7 @@ def _bingo_lines_3x3(rids: list[str]) -> list[tuple[int, int, list[str]]]:
         (1, 0, [0, 3, 6]),
         (1, 1, [1, 4, 7]),
         (1, 2, [2, 5, 8]),
-        # diagonals
+        # diags
         (2, 0, [0, 4, 8]),  # main
         (2, 1, [2, 4, 6]),  # anti
     ]
@@ -55,18 +63,21 @@ def _bingo_lines_3x3(rids: list[str]) -> list[tuple[int, int, list[str]]]:
 
 
 def _enforce_bingo_guarantee(cards: list[dict], callable_set: set[str]) -> None:
-    """Enforce Acceptance Check A by adding the minimal missing line per card."""
+    """Enforce Acceptance Check A by adding minimal missing line per card."""
     for card in cards:
         rids = list(card.get("rhythm_ids") or [])
         if len(rids) != 9:
-            raise SystemExit(f"Card {card.get('card_id')} has {len(rids)} rhythms; expected 9.")
+            raise SystemExit(
+                f"Card {card.get('card_id')} has {len(rids)} rhythms; expected 9 (3x3)."
+            )
 
-        best_missing: set[str] | None = None
         best_key: tuple[int, int, int, tuple[str, ...]] | None = None
+        best_missing: set[str] = set()
 
         for kind_rank, pos_rank, line in _bingo_lines_3x3(rids):
             missing = {x for x in line if x not in callable_set}
-            # Deterministic tie-break (spec v0.2):
+
+            # Spec v0.2 deterministic tie-break:
             #  1) minimal |missing|
             #  2) rows before cols before diagonals
             #  3) top->bottom / left->right / main->anti
@@ -81,7 +92,7 @@ def _enforce_bingo_guarantee(cards: list[dict], callable_set: set[str]) -> None:
 
 
 def _bingo_guarantee_failures(cards: list[dict], callable_set: set[str]) -> int:
-    """Return count of cards with zero fully-callable bingo lines."""
+    """Count cards that have zero fully-callable bingo lines."""
     failures = 0
     for card in cards:
         rids = list(card.get("rhythm_ids") or [])
@@ -96,7 +107,7 @@ def _bingo_guarantee_failures(cards: list[dict], callable_set: set[str]) -> int:
 
 
 def _full_card_candidates(cards: list[dict], callable_set: set[str]) -> int:
-    """Return number of cards whose full 3x3 set is callable."""
+    """Count cards whose full 3x3 is callable."""
     n = 0
     for card in cards:
         rids = set(card.get("rhythm_ids") or [])
@@ -106,12 +117,12 @@ def _full_card_candidates(cards: list[dict], callable_set: set[str]) -> int:
 
 
 def _enforce_full_card_guarantee(cards: list[dict], callable_set: set[str]) -> None:
-    """Enforce Acceptance Check B by adding the missing rhythms for the closest card."""
+    """Enforce Acceptance Check B by completing the closest card."""
     if _full_card_candidates(cards, callable_set) >= 1:
         return
 
-    best_missing: set[str] | None = None
     best_key: tuple[int, str] | None = None
+    best_missing: set[str] = set()
 
     for card in cards:
         card_id = str(card.get("card_id") or "")
@@ -147,7 +158,7 @@ def main() -> None:
     min_occ_default = int(call_cfg.get("min_occ", 2))
     min_pool_size = int(call_cfg.get("min_pool_size", 20))
 
-    pools_out = []
+    pools_out: list[dict] = []
     for rec in intervals:
         pool_id = str(rec["pool_id"])
         symbol = str(rec["symbol"])
@@ -163,38 +174,39 @@ def main() -> None:
         freq = _freq_over_cards(cards, k_eff)
         core = sorted([rid for rid, f in freq.items() if f >= min_occ_default])
         min_occ_used = min_occ_default
-
-        # Keep the old "min_pool_size" guardrail, but correctness is now defined
-        # by the fairness guarantees (A/B), not by this heuristic.
         if len(core) < min_pool_size:
             core = sorted([rid for rid, f in freq.items() if f >= 1])
             min_occ_used = 1
 
+        core_set = set(core)
         callable_set = set(core)
 
-        # Step 3: enforce bingo guarantee (A) by construction
+        # Step 3: enforce bingo guarantee (A)
         _enforce_bingo_guarantee(sub_cards, callable_set)
+        after_bingo = set(callable_set)
 
-        # Step 4: enforce full-card guarantee (B) by construction
+        # Step 4: enforce full-card guarantee (B)
         _enforce_full_card_guarantee(sub_cards, callable_set)
+        after_full = set(callable_set)
 
-        # Step 5: final callable set (single list)
-        pool = sorted(callable_set)
+        pool_final = sorted(after_full)
+        final_set = set(pool_final)
 
-        # Sanity guardrails (D)
-        if len(pool) < 1:
+        # Guardrails (D)
+        if not final_set:
             raise SystemExit(f"Pool {symbol} produced empty callable set (unexpected).")
-
         all_on_cards: set[str] = set()
         for c in sub_cards:
             all_on_cards.update(c.get("rhythm_ids") or [])
-        ghosts = set(pool) - all_on_cards
+        ghosts = final_set - all_on_cards
         if ghosts:
-            raise SystemExit(f"Pool {symbol} has ghost rhythms not on cards 1..{k_eff}: {sorted(ghosts)}")
+            raise SystemExit(
+                f"Pool {symbol} has ghost rhythms not on cards 1..{k_eff}: {sorted(ghosts)}"
+            )
 
         # Validate guarantees (hard fail)
-        bingo_failures = _bingo_guarantee_failures(sub_cards, set(pool))
-        full_candidates = _full_card_candidates(sub_cards, set(pool))
+        bingo_failures = _bingo_guarantee_failures(sub_cards, final_set)
+        full_candidates = _full_card_candidates(sub_cards, final_set)
         bingo_ok = bingo_failures == 0
         full_ok = full_candidates >= 1
         if not bingo_ok or not full_ok:
@@ -203,6 +215,11 @@ def main() -> None:
                 f"bingo_ok={bingo_ok} (failures={bingo_failures}), "
                 f"full_ok={full_ok} (candidates={full_candidates})."
             )
+
+        core_size = int(len(core_set))
+        final_size = int(len(final_set))
+        added_for_bingo = int(len(after_bingo - core_set))
+        added_for_full = int(len(after_full - after_bingo))
 
         pools_out.append(
             {
@@ -213,11 +230,18 @@ def main() -> None:
                 "k": k,
                 "k_effective": k_eff,
                 "min_occ_used": min_occ_used,
-                "callable_rhythm_ids": pool,
+                "callable_rhythm_ids": pool_final,
                 "guarantees": {
                     "bingo_all_cards": True,
                     "full_card_exists": True,
                 },
+                # Diagnostics (transparency; no teacher workflow changes)
+                "core_callable_size": core_size,
+                "final_callable_size": final_size,
+                "added_for_bingo_size": added_for_bingo,
+                "added_for_full_card_size": added_for_full,
+                "bingo_guarantee_failures": int(bingo_failures),
+                "full_card_candidates": int(full_candidates),
             }
         )
 
@@ -239,11 +263,17 @@ def main() -> None:
     write_json(Path(args.out), out)
 
     # Call sheet (text fallback, teacher-facing)
-    lines = []
-    lines.append("Rhythm Bingo — Call Sheet (text fallback)\n")
-    lines.append("Recommendation: for today’s attendance, use student cards 1–k and the caller symbol for that interval.\n")
-    lines.append("All listed rhythms guarantee bingo for every marked card, and at least one full-card is possible.\n")
+    lines: list[str] = []
+    lines.append("Rhythm Bingo — Call Sheet (text fallback)")
     lines.append("")
+    lines.append(
+        "Recommendation: for today’s attendance, use student cards 1–k and the caller symbol for that interval."
+    )
+    lines.append(
+        "All listed rhythms guarantee bingo for every marked card, and that at least one full-card is possible."
+    )
+    lines.append("")
+
     for p in pools_out:
         sym = p["symbol"]
         cmin = p["children_min"]
@@ -251,6 +281,17 @@ def main() -> None:
         k_eff = p["k_effective"]
         ids = p["callable_rhythm_ids"]
         lines.append(f"{sym}  ({cmin}–{cmax} children)  Use student cards 1–{k_eff}")
+        # Teacher-visible transparency (no extra steps): how large is the call set and why.
+        lines.append(
+            "Callable count: {final} (core {core}, +bingo {ab}, +full {af}); full-card candidates: {fc}; min_occ_used={mo}".format(
+                final=p.get("final_callable_size"),
+                core=p.get("core_callable_size"),
+                ab=p.get("added_for_bingo_size"),
+                af=p.get("added_for_full_card_size"),
+                fc=p.get("full_card_candidates"),
+                mo=p.get("min_occ_used"),
+            )
+        )
         if ids:
             lines.append(" ".join(ids))
         else:

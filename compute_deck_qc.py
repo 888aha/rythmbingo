@@ -5,10 +5,14 @@ from __future__ import annotations
 Inputs:
   - out/config_pools.json
   - out/deck_order.json
-  - out/pools.json (optional but used for symbols/interval labels)
+  - out/pools.json (optional but used for callable set + pool labels)
 Outputs:
   - out/deck_qc.json
   - out/deck_qc.csv
+
+v0.2 additions:
+  - Per pool, compute the two fairness booleans (A/B) and their counts.
+  - Surface diagnostic sizes (core/final/added) when present in pools.json.
 """
 
 from pathlib import Path
@@ -23,12 +27,15 @@ def _bingo_lines_3x3(rids: list[str]) -> list[list[str]]:
     if len(rids) != 9:
         raise ValueError(f"Expected 9 rhythm IDs for 3x3, got {len(rids)}")
     idx_lines: list[list[int]] = [
+        # rows
         [0, 1, 2],
         [3, 4, 5],
         [6, 7, 8],
+        # cols
         [0, 3, 6],
         [1, 4, 7],
         [2, 5, 8],
+        # diagonals
         [0, 4, 8],
         [2, 4, 6],
     ]
@@ -55,7 +62,6 @@ def _quantiles(vals: list[int]) -> dict[str, float]:
     v = sorted(vals)
 
     def pick(p: float) -> float:
-        # nearest-rank on 0..1
         idx = int(round(p * (len(v) - 1)))
         idx = max(0, min(len(v) - 1, idx))
         return float(v[idx])
@@ -69,7 +75,6 @@ def _quantiles(vals: list[int]) -> dict[str, float]:
 
 
 def _overlap_hist(card_sets: list[set[str]]) -> tuple[dict[str, int], int, float, int]:
-    # histogram keys as strings for JSON stability
     hist: dict[str, int] = {}
     n = len(card_sets)
     if n < 2:
@@ -110,20 +115,19 @@ def main() -> None:
 
     intervals = ((cfg.get("pools") or {}).get("intervals")) or []
 
-    # Optional symbol/interval source of truth: pools.json (after clamp)
     pools_doc = read_json(Path(args.pools)) if args.pools else None
-    pools_by_id = {p["pool_id"]: p for p in ((pools_doc or {}).get("pools") or [])}
+    pools_by_id = {p.get("pool_id"): p for p in ((pools_doc or {}).get("pools") or []) if p.get("pool_id")}
 
     # Precompute full-deck duplicates (exact set match)
     seen: set[frozenset[str]] = set()
     duplicate_pairs_full = 0
-    for i in range(len(cards)):
-        si = frozenset(cards[i].get("rhythm_ids") or [])
-        if si in seen:
+    for c in cards:
+        key = frozenset(c.get("rhythm_ids") or [])
+        if key in seen:
             duplicate_pairs_full += 1
-        seen.add(si)
+        seen.add(key)
 
-    rows_out = []
+    rows_out: list[dict] = []
     for rec in intervals:
         pool_id = str(rec["pool_id"])
         symbol = str(rec["symbol"])
@@ -133,8 +137,8 @@ def main() -> None:
         k_eff = min(k, n_cards)
 
         # Use pools.json's effective if present
-        if pool_id in pools_by_id:
-            p = pools_by_id[pool_id]
+        p = pools_by_id.get(pool_id)
+        if p:
             k_eff = int(p.get("k_effective", k_eff))
             symbol = str(p.get("symbol", symbol))
 
@@ -143,32 +147,47 @@ def main() -> None:
         union = set().union(*sets) if sets else set()
 
         # Frequency over union
-        freq = {r: 0 for r in union}
+        freq: dict[str, int] = {r: 0 for r in union}
         for s in sets:
             for r in s:
                 freq[r] = freq.get(r, 0) + 1
 
-        freq_vals = list(freq.values())
-        q = _quantiles(freq_vals)
+        q = _quantiles(list(freq.values()))
 
-        # Callable pool size + min_occ used + fairness guarantees from pools.json if available
+        # Callable pool + fairness checks, from pools.json if available
         call_pool_size = math.nan
         min_occ_used = math.nan
         bingo_ok = math.nan
         full_ok = math.nan
         cards_with_no_bingo_line = math.nan
         full_card_candidates = math.nan
-        if pool_id in pools_by_id:
-            call_pool_size = int(len(pools_by_id[pool_id].get("callable_rhythm_ids") or []))
-            min_occ_used = int(pools_by_id[pool_id].get("min_occ_used", math.nan))
+        core_callable_size = math.nan
+        final_callable_size = math.nan
+        added_for_bingo_size = math.nan
+        added_for_full_card_size = math.nan
 
-            callable_set = set(pools_by_id[pool_id].get("callable_rhythm_ids") or [])
+        if p:
+            callable_ids = list(p.get("callable_rhythm_ids") or [])
+            call_pool_size = int(len(callable_ids))
+            min_occ_used = int(p.get("min_occ_used", math.nan))
+
+            callable_set = set(callable_ids)
             failures = _bingo_guarantee_failures(sub_cards, callable_set)
             candidates = _full_card_candidates(sub_cards, callable_set)
             cards_with_no_bingo_line = int(failures)
             full_card_candidates = int(candidates)
             bingo_ok = (failures == 0)
             full_ok = (candidates >= 1)
+
+            # Surface diagnostic sizes if present (computed in compute_pools.py v0.2)
+            if "core_callable_size" in p:
+                core_callable_size = int(p.get("core_callable_size"))
+            if "final_callable_size" in p:
+                final_callable_size = int(p.get("final_callable_size"))
+            if "added_for_bingo_size" in p:
+                added_for_bingo_size = int(p.get("added_for_bingo_size"))
+            if "added_for_full_card_size" in p:
+                added_for_full_card_size = int(p.get("added_for_full_card_size"))
 
         # Duplicates among 1..k (pairwise identical rhythm sets)
         dup_pairs = 0
@@ -195,6 +214,10 @@ def main() -> None:
                 "full_card_possible_ok": full_ok,
                 "cards_with_no_bingo_line": cards_with_no_bingo_line,
                 "full_card_candidates": full_card_candidates,
+                "core_callable_size": core_callable_size,
+                "final_callable_size": final_callable_size,
+                "added_for_bingo_size": added_for_bingo_size,
+                "added_for_full_card_size": added_for_full_card_size,
                 "duplicate_pairs": int(dup_pairs),
                 "max_overlap": int(max_ov),
                 "mean_overlap": float(mean_ov),
@@ -217,7 +240,6 @@ def main() -> None:
     }
     write_json(Path(args.out_json), out)
 
-    # CSV (compact)
     csv_cols = [
         "k",
         "children_interval",
@@ -229,6 +251,10 @@ def main() -> None:
         "full_card_possible_ok",
         "cards_with_no_bingo_line",
         "full_card_candidates",
+        "core_callable_size",
+        "final_callable_size",
+        "added_for_bingo_size",
+        "added_for_full_card_size",
         "duplicate_pairs",
         "max_overlap",
         "mean_overlap",
