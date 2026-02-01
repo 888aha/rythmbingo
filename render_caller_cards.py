@@ -13,7 +13,7 @@ from pathlib import Path
 import argparse
 
 from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
 
 from svglib.svglib import svg2rlg
@@ -81,9 +81,9 @@ def main() -> None:
         # For now, pools are iterated in pool order, so this preserves that deterministically.
         rid_to_syms[rid] = syms
 
-    # PDF setup: A4 portrait, 1 caller card per page
-    page_w, page_h = A4
-    c = canvas.Canvas(str(args.out), pagesize=A4)
+    # PDF setup: A4 landscape, 1 caller card per page
+    page_w, page_h = landscape(A4)
+    c = canvas.Canvas(str(args.out), pagesize=(page_w, page_h))
 
     font_name, warn = try_register_unicode_font()
     text_font = font_name or "Helvetica"
@@ -105,13 +105,13 @@ def main() -> None:
         draw_svg_fit(c, svg, tile_box_x, tile_box_y, tile_box_w, tile_box_h, pad=10 * mm)
 
         # Footer: rhythm id + pool symbols
-        c.setFont("Helvetica", 14)
-        c.drawString(margin, margin + 18 * mm, rid)
+        c.setFont("Helvetica", 22)
+        c.drawString(margin, margin + 20 * mm, rid)
 
         syms = rid_to_syms.get(rid) or []
         syms_txt = " ".join(syms)
-        c.setFont(text_font, 18)
-        c.drawRightString(page_w - margin, margin + 16 * mm, syms_txt)
+        c.setFont(text_font, 30)
+        c.drawRightString(page_w - margin, margin + 20 * mm, syms_txt)
 
         # Optional: tiny pool order hint (not teacher-facing critical)
         c.setFont("Helvetica", 8)

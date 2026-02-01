@@ -14,7 +14,7 @@ c2 r4 c4
 c4 c2 r4
 c4 r2 c4
 c2 c4 r4
-c4 r4 c2
+# DUPLICATE of line 9: c4 r4 c2
 
 #21–30: eighths introduced (still sparse)
 
@@ -22,7 +22,7 @@ c2 c8 c8 c4
 c4 c8 c8 c2
 c8 c8 c2 c4
 c4 c2 c8 c8
-c2 c4 r4
+# DUPLICATE of line 16: c2 c4 r4
 
 #31–40: mixed quarters and eighths
 
@@ -42,12 +42,12 @@ c4. c8 c8 c8 c4
 
 #51–60: rests inside the bar
 
-c4 r4 c4 c4
+# DUPLICATE of line 30: c4 r4 c4 c4
 c4 c4 r4 c4
 c2 r2
-c4 r2 c4
-c2 r4 c4
-c4 r4 c2
+# DUPLICATE of line 15: c4 r2 c4
+# DUPLICATE of line 12: c2 r4 c4
+# DUPLICATE of line 9: c4 r4 c2
 c4 c8 c8 r4 c4
 
 #61–70: eighths + rests
@@ -72,7 +72,6 @@ c4 c2 c16 c16 c16 c16
 
 #81–90: mixed complexity
 
-c8 c8 c16 c16 c16 c16 c4
 c4 c8 c8 c16 c16 c16 c16
 c8 c8 c4 c16 c16 c16 c16
 c16 c16 c16 c16 c8 c8 c4
@@ -80,5 +79,7 @@ c16 c16 c16 c16 c8 c8 c4
 # 91–100: richest (still pedagogically sane)
 
 c16 c16 c16 c16 c8 c8 c8 c8 r4
-c8 c8 c16 c16 c16 c16 c4 c4
 c16 c16 c16 c16 c4 c8 c8 c4
+
+c8 c8 c16 c16 c16 c16 c4 c4
+c8 c8 c16 c16 c16 c16 c4

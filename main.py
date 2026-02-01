@@ -16,7 +16,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="Rhythm Bingo: deterministic build pipeline")
     ap.add_argument("--out-dir", default="out", help="Directory for computed artifacts (JSON/CSV/call sheet).")
     ap.add_argument("--config", default="out/config_pools.json", help="Pools config JSON.")
-    ap.add_argument("--bank", default="rhytms.txt", help="Rhythm bank file.")
+    ap.add_argument("--bank", default="rhythms.txt", help="Rhythm bank file.")
     ap.add_argument("--tiles-dir", default="tiles_svg", help="Directory for rendered SVG tiles.")
     ap.add_argument("--skip-tiles", action="store_true", help="Skip LilyPond tile rendering stage.")
     ap.add_argument("--skip-catalog", action="store_true", help="Skip rhythm catalog PDF.")
