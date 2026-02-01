@@ -19,15 +19,47 @@ import math
 from rb_utils import read_json, write_json
 
 
+def _bingo_lines_3x3(rids: list[str]) -> list[list[str]]:
+    if len(rids) != 9:
+        raise ValueError(f"Expected 9 rhythm IDs for 3x3, got {len(rids)}")
+    idx_lines: list[list[int]] = [
+        [0, 1, 2],
+        [3, 4, 5],
+        [6, 7, 8],
+        [0, 3, 6],
+        [1, 4, 7],
+        [2, 5, 8],
+        [0, 4, 8],
+        [2, 4, 6],
+    ]
+    return [[rids[i] for i in idxs] for idxs in idx_lines]
+
+
+def _bingo_guarantee_failures(cards: list[dict], callable_set: set[str]) -> int:
+    failures = 0
+    for card in cards:
+        rids = list(card.get("rhythm_ids") or [])
+        ok = any(all(x in callable_set for x in line) for line in _bingo_lines_3x3(rids))
+        if not ok:
+            failures += 1
+    return failures
+
+
+def _full_card_candidates(cards: list[dict], callable_set: set[str]) -> int:
+    return sum(set((c.get("rhythm_ids") or [])).issubset(callable_set) for c in cards)
+
+
 def _quantiles(vals: list[int]) -> dict[str, float]:
     if not vals:
         return {"min": math.nan, "p10": math.nan, "median": math.nan, "max": math.nan}
     v = sorted(vals)
+
     def pick(p: float) -> float:
         # nearest-rank on 0..1
         idx = int(round(p * (len(v) - 1)))
         idx = max(0, min(len(v) - 1, idx))
         return float(v[idx])
+
     return {
         "min": float(v[0]),
         "p10": pick(0.10),
@@ -119,12 +151,24 @@ def main() -> None:
         freq_vals = list(freq.values())
         q = _quantiles(freq_vals)
 
-        # Callable pool size + min_occ used from pools.json if available
+        # Callable pool size + min_occ used + fairness guarantees from pools.json if available
         call_pool_size = math.nan
         min_occ_used = math.nan
+        bingo_ok = math.nan
+        full_ok = math.nan
+        cards_with_no_bingo_line = math.nan
+        full_card_candidates = math.nan
         if pool_id in pools_by_id:
             call_pool_size = int(len(pools_by_id[pool_id].get("callable_rhythm_ids") or []))
             min_occ_used = int(pools_by_id[pool_id].get("min_occ_used", math.nan))
+
+            callable_set = set(pools_by_id[pool_id].get("callable_rhythm_ids") or [])
+            failures = _bingo_guarantee_failures(sub_cards, callable_set)
+            candidates = _full_card_candidates(sub_cards, callable_set)
+            cards_with_no_bingo_line = int(failures)
+            full_card_candidates = int(candidates)
+            bingo_ok = (failures == 0)
+            full_ok = (candidates >= 1)
 
         # Duplicates among 1..k (pairwise identical rhythm sets)
         dup_pairs = 0
@@ -147,6 +191,10 @@ def main() -> None:
                 "freq_max": q["max"],
                 "call_pool_size": call_pool_size,
                 "min_occ_used": min_occ_used,
+                "bingo_guarantee_ok": bingo_ok,
+                "full_card_possible_ok": full_ok,
+                "cards_with_no_bingo_line": cards_with_no_bingo_line,
+                "full_card_candidates": full_card_candidates,
                 "duplicate_pairs": int(dup_pairs),
                 "max_overlap": int(max_ov),
                 "mean_overlap": float(mean_ov),
@@ -156,7 +204,7 @@ def main() -> None:
         )
 
     out = {
-        "version": "v0.1",
+        "version": "v0.2",
         "deck": {
             "n_cards": n_cards,
             "card_size": card_size,
@@ -177,6 +225,10 @@ def main() -> None:
         "union_size",
         "call_pool_size",
         "min_occ_used",
+        "bingo_guarantee_ok",
+        "full_card_possible_ok",
+        "cards_with_no_bingo_line",
+        "full_card_candidates",
         "duplicate_pairs",
         "max_overlap",
         "mean_overlap",
