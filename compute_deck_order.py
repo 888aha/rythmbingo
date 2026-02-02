@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-"""Compute deterministic greedy ordering of a raw deck, 
-    and renumber cards in ordered output.
+"""Compute deterministic greedy ordering of a raw deck,
+and renumber cards in ordered output.
 
 Input : deck_raw.json
 Output: deck_order.json (same cards, reordered)
+
+Teacher-facing semantics:
+- In deck_order.json, card_id is renumbered as plain "1".."N" in the FINAL order.
+- The original (raw) card id is preserved as card_id_raw for debugging.
 """
 
 from pathlib import Path
@@ -53,13 +57,13 @@ def main() -> None:
     rng = random.Random(seed)
 
     # Normalize: keep original order index for deterministic tie-break
-    items = []
+    items: list[dict] = []
     for ix, c in enumerate(cards_in):
         rids = c.get("rhythm_ids") or []
         items.append(
             {
                 "orig_index": ix,
-                "card_id": c.get("card_id") or f"C{ix+1:03d}",
+                "card_id": str(c.get("card_id") or f"C{ix+1:03d}"),
                 "rhythm_ids": list(rids),
                 "set": frozenset(rids),
             }
@@ -91,16 +95,15 @@ def main() -> None:
             rng.shuffle(tie_items)
             chosen = tie_items[0]
 
-        # Teacher-facing card numbering must match the ordered-deck prefix semantics
-        # used by pools ("use cards 1..k"). Therefore we renumber cards here so that
-        # deck_order.json has C001..C{N} in *ordered* sequence.
-        new_card_id = f"C{len(selected) + 1:03d}"
+        # Teacher-facing card numbering must match the ordered-deck prefix semantics used by pools.
+        # Therefore, we renumber cards here as plain "1".."N" in the FINAL ordered sequence.
+        new_card_id = str(len(selected) + 1)
 
-        # Keep the previous id for debugging/traceability (optional; not used by PDFs).
+        # Keep the previous id for debugging/traceability (optional; not used by teacher workflow).
         selected.append(
             {
-                "card_id": new_card_id,
-                "card_id_raw": chosen["card_id"],
+                "card_id": new_card_id,          # teacher-facing
+                "card_id_raw": chosen["card_id"],# traceability
                 "rhythm_ids": chosen["rhythm_ids"],
             }
         )

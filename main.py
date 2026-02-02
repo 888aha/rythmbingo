@@ -73,8 +73,6 @@ def main() -> None:
         str(deck_order),
         "--out",
         str(pools_json),
-        "--call-sheet",
-        str(call_sheet_txt),
     )
 
     run_py(
@@ -89,6 +87,17 @@ def main() -> None:
         str(deck_qc_json),
         "--out-csv",
         str(deck_qc_csv),
+    )
+
+    # Teacher-friendly call sheet: Part 1+2 from pools + Part 3 stats from deck_qc.csv
+    run_py(
+        "render_call_sheet.py",
+        "--pools",
+        str(pools_json),
+        "--deck-qc-csv",
+        str(deck_qc_csv),
+        "--out",
+        str(call_sheet_txt),
     )
 
     if not args.skip_caller:

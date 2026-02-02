@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-"""Compute callable rhythm pools and a text call sheet.
+"""Compute callable rhythm pools.
 
 Inputs:
   - out/config_pools.json
   - out/deck_order.json
 Outputs:
   - out/pools.json
-  - out/call_sheet.txt
 
 Pool callable-set semantics (Implementation Spec v0.2):
   - Start from a frequency-derived "core" callable set.
@@ -142,7 +141,6 @@ def main() -> None:
     ap.add_argument("--config", required=True, help="Path to out/config_pools.json")
     ap.add_argument("--deck", required=True, help="Path to out/deck_order.json")
     ap.add_argument("--out", required=True, help="Output pools.json")
-    ap.add_argument("--call-sheet", required=True, help="Output call_sheet.txt")
     args = ap.parse_args()
 
     cfg = read_json(Path(args.config))
@@ -261,47 +259,7 @@ def main() -> None:
     }
 
     write_json(Path(args.out), out)
-
-    # Call sheet (text fallback, teacher-facing)
-    lines: list[str] = []
-    lines.append("Rhythm Bingo — Call Sheet (text fallback)")
-    lines.append("")
-    lines.append(
-        "Recommendation: for today’s attendance, use student cards 1–k and the caller symbol for that interval."
-    )
-    lines.append(
-        "All listed rhythms guarantee bingo for every marked card, and that at least one full-card is possible."
-    )
-    lines.append("")
-
-    for p in pools_out:
-        sym = p["symbol"]
-        cmin = p["children_min"]
-        cmax = p["children_max"]
-        k_eff = p["k_effective"]
-        ids = p["callable_rhythm_ids"]
-        lines.append(f"{sym}  ({cmin}–{cmax} children)  Use student cards 1–{k_eff}")
-        # Teacher-visible transparency (no extra steps): how large is the call set and why.
-        lines.append(
-            "Callable count: {final} (core {core}, +bingo {ab}, +full {af}); full-card candidates: {fc}; min_occ_used={mo}".format(
-                final=p.get("final_callable_size"),
-                core=p.get("core_callable_size"),
-                ab=p.get("added_for_bingo_size"),
-                af=p.get("added_for_full_card_size"),
-                fc=p.get("full_card_candidates"),
-                mo=p.get("min_occ_used"),
-            )
-        )
-        if ids:
-            lines.append(" ".join(ids))
-        else:
-            lines.append("(no callable rhythms — check deck_qc)")
-        lines.append("")
-
-    Path(args.call_sheet).write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     print(f"Wrote pools: {args.out}")
-    print(f"Wrote call sheet: {args.call_sheet}")
-
 
 if __name__ == "__main__":
     main()
