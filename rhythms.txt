@@ -4,7 +4,7 @@ c1
 c2 c2
 c2. c4
 c4 c2.
-c4. c2
+# INVALID (sum=7/8 of whole note; expected 1): c4. c2
 c4 c2 c4
 c4 r4 c2
 
@@ -72,9 +72,9 @@ c4 c2 c16 c16 c16 c16
 
 #81–90: mixed complexity
 
-c4 c8 c8 c16 c16 c16 c16
-c8 c8 c4 c16 c16 c16 c16
-c16 c16 c16 c16 c8 c8 c4
+# INVALID (sum=3/4 of whole note; expected 1): c4 c8 c8 c16 c16 c16 c16
+# INVALID (sum=3/4 of whole note; expected 1): c8 c8 c4 c16 c16 c16 c16
+# INVALID (sum=3/4 of whole note; expected 1): c16 c16 c16 c16 c8 c8 c4
 
 # 91–100: richest (still pedagogically sane)
 
@@ -82,4 +82,4 @@ c16 c16 c16 c16 c8 c8 c8 c8 r4
 c16 c16 c16 c16 c4 c8 c8 c4
 
 c8 c8 c16 c16 c16 c16 c4 c4
-c8 c8 c16 c16 c16 c16 c4
+# INVALID (sum=3/4 of whole note; expected 1): c8 c8 c16 c16 c16 c16 c4
