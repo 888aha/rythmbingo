@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-"""Compute deterministic greedy ordering of a raw deck.
+"""Compute deterministic greedy ordering of a raw deck, 
+    and renumber cards in ordered output.
 
 Input : deck_raw.json
 Output: deck_order.json (same cards, reordered)
@@ -90,7 +91,20 @@ def main() -> None:
             rng.shuffle(tie_items)
             chosen = tie_items[0]
 
-        selected.append({"card_id": chosen["card_id"], "rhythm_ids": chosen["rhythm_ids"]})
+        # Teacher-facing card numbering must match the ordered-deck prefix semantics
+        # used by pools ("use cards 1..k"). Therefore we renumber cards here so that
+        # deck_order.json has C001..C{N} in *ordered* sequence.
+        new_card_id = f"C{len(selected) + 1:03d}"
+
+        # Keep the previous id for debugging/traceability (optional; not used by PDFs).
+        selected.append(
+            {
+                "card_id": new_card_id,
+                "card_id_raw": chosen["card_id"],
+                "rhythm_ids": chosen["rhythm_ids"],
+            }
+        )
+
         selected_sets.append(chosen["set"])
 
         # Update union/freq
