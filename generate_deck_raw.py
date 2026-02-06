@@ -26,7 +26,7 @@ from rb_utils import (
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Generate deterministic raw deck (fixed 3x3).")
-    ap.add_argument("--config", required=True, help="Path to out/config_pools.json")
+    ap.add_argument("--config", required=True, help="Path to config_pools.json")
     ap.add_argument("--bank", default="rhythms.txt", help="(ignored) rhythm bank file; deck is derived from tiles_svg/")
     ap.add_argument("--tiles", default="tiles_svg", help="Tiles directory (tiles_svg).")
     ap.add_argument("--out", required=True, help="Output deck_raw.json")

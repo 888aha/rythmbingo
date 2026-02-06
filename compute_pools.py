@@ -3,7 +3,7 @@ from __future__ import annotations
 """Compute callable rhythm pools.
 
 Inputs:
-  - out/config_pools.json
+  - config_pools.json
   - out/deck_order.json
 Outputs:
   - out/pools.json
@@ -138,7 +138,7 @@ def _enforce_full_card_guarantee(cards: list[dict], callable_set: set[str]) -> N
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Compute attendance pools + call sheet")
-    ap.add_argument("--config", required=True, help="Path to out/config_pools.json")
+    ap.add_argument("--config", required=True, help="Path to config_pools.json")
     ap.add_argument("--deck", required=True, help="Path to out/deck_order.json")
     ap.add_argument("--out", required=True, help="Output pools.json")
     args = ap.parse_args()

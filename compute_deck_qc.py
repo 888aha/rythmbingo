@@ -3,7 +3,7 @@ from __future__ import annotations
 """Compute deck diagnostics (Deck QC) for each recommended k.
 
 Inputs:
-  - out/config_pools.json
+  - config_pools.json
   - out/deck_order.json
   - out/pools.json (optional but used for callable set + pool labels)
 Outputs:
@@ -96,7 +96,7 @@ def _overlap_hist(card_sets: list[set[str]]) -> tuple[dict[str, int], int, float
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Compute Deck QC diagnostics")
-    ap.add_argument("--config", required=True, help="Path to out/config_pools.json")
+    ap.add_argument("--config", required=True, help="Path to config_pools.json")
     ap.add_argument("--deck", required=True, help="Path to out/deck_order.json")
     ap.add_argument("--pools", required=False, help="Path to out/pools.json")
     ap.add_argument("--out-json", required=True, help="Output deck_qc.json")

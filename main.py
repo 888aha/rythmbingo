@@ -15,7 +15,7 @@ def run_py(script: str, *args: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Rhythm Bingo: deterministic build pipeline")
     ap.add_argument("--out-dir", default="out", help="Directory for computed artifacts (JSON/CSV/call sheet).")
-    ap.add_argument("--config", default="out/config_pools.json", help="Pools config JSON.")
+    ap.add_argument("--config", default="config_pools.json", help="Pools config JSON.")
     ap.add_argument("--bank", default="rhythms.txt", help="Rhythm bank file.")
     ap.add_argument("--tiles-dir", default="tiles_svg", help="Directory for rendered SVG tiles.")
     ap.add_argument("--skip-tiles", action="store_true", help="Skip LilyPond tile rendering stage.")
@@ -29,7 +29,7 @@ def main() -> None:
 
     config_path = Path(args.config)
     if not config_path.exists():
-        raise SystemExit(f"Missing config: {config_path}. Expected default at out/config_pools.json")
+        raise SystemExit(f"Missing config: {config_path}. Expected default at config_pools.json")
 
     deck_raw = out_dir / "deck_raw.json"
     deck_order = out_dir / "deck_order.json"
@@ -44,7 +44,11 @@ def main() -> None:
         run_py("render_tiles.py")
 
     if not args.skip_catalog:
-        run_py("catalog_rhythms.py")
+        run_py(
+            "catalog_rhythms.py",
+            "--out",
+            str(out_dir / "rhythm_catalog.pdf"),
+        )
 
     run_py(
         "generate_deck_raw.py",
